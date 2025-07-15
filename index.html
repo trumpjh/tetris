@@ -550,15 +550,42 @@ function getHighScores() {
 function saveHighScores(scores) {
     localStorage.setItem('tetrisHighScores', JSON.stringify(scores));
 }
-function updateHighScoreList() {
+async function updateHighScoreList() {
     const list = document.getElementById('highScoreList');
     if (!list) return;
-    const scores = getHighScores();
+    list.innerHTML = '<li>불러오는 중...</li>';
+    const scores = await fetchHighScores();
     list.innerHTML = '';
-    scores.slice(0,5).forEach((entry, idx) => {
+    scores.slice(0,5).forEach(entry => {
         const li = document.createElement('li');
         li.textContent = `${entry.name} - ${entry.score}`;
         list.appendChild(li);
+    });
+}
+
+// 서버에서 최고 점수 가져오기
+async function fetchHighScores() {
+    try {
+        const res = await fetch(HIGH_SCORE_URL + '/latest', {
+            headers: { 'X-Master-Key': API_KEY }
+        });
+        if (!res.ok) throw new Error('fetch error');
+        const data = await res.json();
+        return data.record || [];
+    } catch (e) {
+        return [];
+    }
+}
+
+// 서버에 최고 점수 저장
+async function saveHighScores(scores) {
+    await fetch(HIGH_SCORE_URL, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Master-Key': API_KEY
+        },
+        body: JSON.stringify(scores)
     });
 }
 
@@ -587,18 +614,24 @@ function updateHighScoreList() {
         document.addEventListener('DOMContentLoaded', function() {
     const saveBtn = document.getElementById('saveScoreBtn');
     if (saveBtn) {
-        saveBtn.onclick = function() {
+        saveBtn.onclick = async function() {
             const name = document.getElementById('playerName').value.trim() || '익명';
-            const scores = getHighScores();
+            let scores = await fetchHighScores();
             scores.push({ name, score });
             scores.sort((a, b) => b.score - a.score);
-            saveHighScores(scores.slice(0,5));
+            scores = scores.slice(0,5);
+            await saveHighScores(scores);
             updateHighScoreList();
             document.getElementById('nameInputBox').style.display = 'none';
         };
     }
     updateHighScoreList();
 });
+        
+        // jsonbin.io에서 발급받은 BIN_ID와 API_KEY를 입력하세요
+const BIN_ID = 'tetris';
+const API_KEY = '6875ea226063391d31ade297';
+const HIGH_SCORE_URL = `https://api.jsonbin.io/v3/b/${tetris}`;
         
         // 게임 시작
         startGame();
