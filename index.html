@@ -125,6 +125,10 @@
             <div class="game-over" id="gameOver">
                 <h2>게임 오버!</h2>
                 <p>점수: <span id="finalScore">0</span></p>
+                <div id="nameInputBox" style="margin:15px 0; display:none;">
+                    <input type="text" id="playerName" maxlength="10" placeholder="이름 입력" style="padding:5px; border-radius:4px; border:1px solid #ccc;">
+                    <button class="restart-btn" id="saveScoreBtn">저장</button>
+                </div>
                 <button class="restart-btn" onclick="restartGame()">다시 시작</button>
             </div>
         </div>
@@ -160,6 +164,11 @@
                 <p>R : 즉시 리셋</p>
             </div>
         </div>
+    </div>
+
+    <div class="score-board" style="margin-top:20px;">
+        <div style="font-weight:bold; margin-bottom:8px;">최고 점수 TOP 5</div>
+        <ol id="highScoreList" style="padding-left:20px; color:#ffd700;"></ol>
     </div>
 
     <script>
@@ -411,6 +420,25 @@
             gameRunning = false;
             document.getElementById('finalScore').textContent = score;
             document.getElementById('gameOver').style.display = 'block';
+
+            // 최고점수 진입 여부 확인
+            const scores = getHighScores();
+            let isHighScore = false;
+            if (score > 0) {
+                if (scores.length < 5 || score > scores[scores.length-1].score || scores.some(s => score > s.score)) {
+                    isHighScore = true;
+                }
+            }
+            const nameBox = document.getElementById('nameInputBox');
+            if (isHighScore) {
+                nameBox.style.display = 'block';
+                document.getElementById('playerName').value = '';
+                setTimeout(() => {
+                    document.getElementById('playerName').focus();
+                }, 100);
+            } else {
+                nameBox.style.display = 'none';
+            }
         }
         
         // 게임 재시작
@@ -430,6 +458,7 @@
             currentPiece = createPiece();
             nextPiece = createPiece();
             gameRunning = true;
+            updateHighScoreList();
             gameLoop();
         }
         
@@ -513,6 +542,63 @@
                     return;
             }
         });
+        
+        // 최고 점수 저장 및 표시
+function getHighScores() {
+    return JSON.parse(localStorage.getItem('tetrisHighScores') || '[]');
+}
+function saveHighScores(scores) {
+    localStorage.setItem('tetrisHighScores', JSON.stringify(scores));
+}
+function updateHighScoreList() {
+    const list = document.getElementById('highScoreList');
+    if (!list) return;
+    const scores = getHighScores();
+    list.innerHTML = '';
+    scores.slice(0,5).forEach((entry, idx) => {
+        const li = document.createElement('li');
+        li.textContent = `${entry.name} - ${entry.score}`;
+        list.appendChild(li);
+    });
+}
+
+// 최고 점수 업데이트
+        function updateHighScores() {
+            const highScores = JSON.parse(localStorage.getItem('highScores')) || [];
+            highScores.push(score);
+            highScores.sort((a, b) => b - a);
+            highScores.splice(5);
+            localStorage.setItem('highScores', JSON.stringify(highScores));
+            drawHighScores();
+        }
+        
+        // 최고 점수 그리기
+        function drawHighScores() {
+            const highScoreList = document.getElementById('highScoreList');
+            highScoreList.innerHTML = '';
+            const highScores = JSON.parse(localStorage.getItem('highScores')) || [];
+            highScores.forEach((score, index) => {
+                const li = document.createElement('li');
+                li.textContent = `${index + 1}. ${score}`;
+                highScoreList.appendChild(li);
+            });
+        }
+        
+        document.addEventListener('DOMContentLoaded', function() {
+    const saveBtn = document.getElementById('saveScoreBtn');
+    if (saveBtn) {
+        saveBtn.onclick = function() {
+            const name = document.getElementById('playerName').value.trim() || '익명';
+            const scores = getHighScores();
+            scores.push({ name, score });
+            scores.sort((a, b) => b.score - a.score);
+            saveHighScores(scores.slice(0,5));
+            updateHighScoreList();
+            document.getElementById('nameInputBox').style.display = 'none';
+        };
+    }
+    updateHighScoreList();
+});
         
         // 게임 시작
         startGame();
