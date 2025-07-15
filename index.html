@@ -157,6 +157,7 @@
                 <p>↑ : 회전</p>
                 <p>스페이스 : 즉시 낙하</p>
                 <p>P, ESC : 일시정지/재개</p>
+                <p>R : 즉시 리셋</p>
             </div>
         </div>
     </div>
@@ -505,6 +506,10 @@
                         dropTime = Date.now();
                         gameLoop();
                     }
+                    return;
+                case 'r':
+                case 'R':
+                    restartGame();
                     return;
             }
         });
