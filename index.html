@@ -161,6 +161,7 @@
     </div>
 
     <script>
+        let paused = false;
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         const nextCanvas = document.getElementById('nextCanvas');
@@ -433,11 +434,17 @@
         // 게임 루프
         function gameLoop() {
             if (!gameRunning) return;
-            
+            if (paused) return;
             update();
             draw();
             requestAnimationFrame(gameLoop);
-        }
+        function gameLoop() {
+        if (!gameRunning) return;
+        if (paused) return;
+        update();
+        draw();
+        requestAnimationFrame(gameLoop);
+    }    let paused = false;}
         
         // 게임 업데이트
         function update() {
@@ -494,6 +501,16 @@
                     updateScore();
                     placePiece();
                     break;
+                // ESC 또는 P 키로 일시정지/재개
+                case 'p':
+                case 'P':
+                case 'Escape':
+                    paused = !paused;
+                    if (!paused) {
+                        dropTime = Date.now();
+                        gameLoop();
+                    }
+                    return;
             }
         });
         
