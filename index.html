@@ -157,7 +157,7 @@
             apiKey: "AIzaSyDCS1EfQ-DoSLM4pAjdlguMfiRkcH34u8w",
             authDomain: "tetris-list.firebaseapp.com",
             projectId: "tetris-list",
-            storageBucket: "tetris-list.firebasestorage.app",
+            storageBucket: "tetris-list.appspot.com",
             messagingSenderId: "883824472279",
             appId: "1:883824472279:web:16c3ab67bf1b323ef1c092",
             measurementId: "G-8L4NH0F8S1"
@@ -197,6 +197,12 @@
         let dropTime = 0;
         let dropInterval = 1000;
         let paused = false;
+
+        // NEW: 고스트 블록 관련 변수
+        let ghostPiece = null;
+        let ghostEnabled = false;
+        let keySequence = [];
+        const activationCode = 'asdf';
         
         function initBoard() {
             board = [];
@@ -226,6 +232,7 @@
             ctx.strokeRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
         }
         
+        // MODIFIED: drawBoard 함수 수정 (고스트 블록 그리기 추가)
         function drawBoard() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             for (let y = 0; y < BOARD_HEIGHT; y++) {
@@ -235,9 +242,35 @@
                     }
                 }
             }
+            // NEW: 고스트 블록을 먼저 그림
+            if (ghostEnabled && ghostPiece) {
+                drawGhostPiece(ctx, ghostPiece);
+            }
             if (currentPiece) {
                 drawPiece(ctx, currentPiece);
             }
+        }
+
+        // NEW: 16진수 색상을 RGBA로 변환하는 헬퍼 함수
+        function hexToRgba(hex, alpha) {
+            const r = parseInt(hex.slice(1, 3), 16);
+            const g = parseInt(hex.slice(3, 5), 16);
+            const b = parseInt(hex.slice(5, 7), 16);
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        }
+
+        // NEW: 고스트 블록을 그리는 함수
+        function drawGhostPiece(ctx, piece) {
+            const ghostColor = hexToRgba(piece.color, 0.2); // 20% 투명도로 설정
+            piece.shape.forEach((row, y) => {
+                row.forEach((value, x) => {
+                    if (value) {
+                        // 고스트 블록은 테두리 없이 희미하게 그림
+                        ctx.fillStyle = ghostColor;
+                        ctx.fillRect((piece.x + x) * BLOCK_SIZE, (piece.y + y) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+                    }
+                });
+            });
         }
         
         function drawPiece(ctx, piece) {
@@ -288,6 +321,18 @@
             }
             return true;
         }
+
+        // NEW: 고스트 블록의 위치를 업데이트하는 함수
+        function updateGhostPiece() {
+            if (!currentPiece) {
+                ghostPiece = null;
+                return;
+            }
+            ghostPiece = { ...currentPiece, shape: currentPiece.shape, color: currentPiece.color };
+            while (isValidMove(ghostPiece, 0, 1)) {
+                ghostPiece.y++;
+            }
+        }
         
         function rotatePiece(piece) {
             const rotated = [];
@@ -301,6 +346,7 @@
             return rotated;
         }
         
+        // MODIFIED: placePiece 함수 수정 (고스트 블록 업데이트)
         function placePiece() {
             currentPiece.shape.forEach((row, y) => {
                 row.forEach((value, x) => {
@@ -312,6 +358,7 @@
             clearLines();
             currentPiece = nextPiece;
             nextPiece = createPiece();
+            updateGhostPiece(); // 새 블록이 나올 때 고스트 블록 업데이트
             if (!isValidMove(currentPiece, 0, 0)) {
                 gameOver();
             }
@@ -347,14 +394,12 @@
             document.getElementById('finalScore').textContent = score;
             document.getElementById('gameOver').style.display = 'block';
 
-            // 게임 오버 시 점수 저장
             const name = prompt("게임 오버! 랭킹에 등록할 이름을 입력하세요:", "플레이어");
             if (name && score > 0) {
                 await saveScore(name, score);
             }
         }
 
-        // ⭐ 신규 기능: 점수 저장
         async function saveScore(name, score) {
             try {
                 await db.collection("scores").add({
@@ -363,16 +408,15 @@
                     createdAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
                 console.log("점수 저장 성공!");
-                await displayLeaderboard(); // 리더보드 즉시 갱신
+                await displayLeaderboard(); 
             } catch (error) {
                 console.error("점수 저장 실패: ", error);
             }
         }
 
-        // ⭐ 신규 기능: 리더보드 표시
         async function displayLeaderboard() {
             const list = document.getElementById('leaderboardList');
-            list.innerHTML = "<li>불러오는 중...</li>"; // 로딩 표시
+            list.innerHTML = "<li>불러오는 중...</li>"; 
 
             try {
                 const snapshot = await db.collection("scores")
@@ -380,7 +424,7 @@
                     .limit(5)
                     .get();
                 
-                list.innerHTML = ""; // 목록 초기화
+                list.innerHTML = ""; 
                 if (snapshot.empty) {
                     list.innerHTML = "<li>아직 등록된 점수가 없습니다.</li>";
                     return;
@@ -408,10 +452,12 @@
             startGame();
         }
         
+        // MODIFIED: startGame 함수 수정 (고스트 블록 업데이트)
         function startGame() {
             initBoard();
             currentPiece = createPiece();
             nextPiece = createPiece();
+            updateGhostPiece(); // 게임 시작 시 고스트 블록 업데이트
             gameRunning = true;
             paused = false;
             dropTime = Date.now();
@@ -447,7 +493,16 @@
             drawNextPiece();
         }
         
+        // MODIFIED: 키보드 이벤트 리스너 수정 (asdf 감지 및 고스트 블록 업데이트)
         document.addEventListener('keydown', (e) => {
+            // NEW: 'asdf' 키 순서 감지 로직
+            keySequence.push(e.key.toLowerCase());
+            keySequence = keySequence.slice(-activationCode.length); // 항상 마지막 4개 키만 유지
+            if (keySequence.join('') === activationCode) {
+                ghostEnabled = !ghostEnabled; // 기능 토글
+                updateGhostPiece(); // 상태 변경 시 즉시 업데이트
+            }
+
             if (!gameRunning) return;
 
             if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
@@ -455,7 +510,7 @@
             }
             if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') {
                 paused = !paused;
-                if (!paused) { dropTime = Date.now(); } // 일시정지 해제 시 시간 초기화
+                if (!paused) { dropTime = Date.now(); } 
                 return;
             }
 
@@ -463,10 +518,16 @@
             
             switch (e.key) {
                 case 'ArrowLeft':
-                    if (isValidMove(currentPiece, -1, 0)) currentPiece.x--;
+                    if (isValidMove(currentPiece, -1, 0)) {
+                        currentPiece.x--;
+                        updateGhostPiece(); // 이동 시 고스트 블록 업데이트
+                    }
                     break;
                 case 'ArrowRight':
-                    if (isValidMove(currentPiece, 1, 0)) currentPiece.x++;
+                    if (isValidMove(currentPiece, 1, 0)) {
+                        currentPiece.x++;
+                        updateGhostPiece(); // 이동 시 고스트 블록 업데이트
+                    }
                     break;
                 case 'ArrowDown':
                     if (isValidMove(currentPiece, 0, 1)) {
@@ -477,7 +538,10 @@
                     break;
                 case 'ArrowUp':
                     const rotated = rotatePiece(currentPiece);
-                    if (isValidMove(currentPiece, 0, 0, rotated)) currentPiece.shape = rotated;
+                    if (isValidMove(currentPiece, 0, 0, rotated)) {
+                        currentPiece.shape = rotated;
+                        updateGhostPiece(); // 회전 시 고스트 블록 업데이트
+                    }
                     break;
                 case ' ':
                     while (isValidMove(currentPiece, 0, 1)) {
