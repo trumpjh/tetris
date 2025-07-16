@@ -152,8 +152,7 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
     
     <script>
-        // ⚠️ 중요: 이 부분에 본인의 Firebase 설정 코드를 정확하게 붙여넣었는지 다시 확인해주세요.
-        // 이 코드가 잘못되면 점수 저장이 동작하지 않습니다!
+        // TODO: 이 부분에 1단계에서 복사한 본인의 Firebase 설정 코드를 붙여넣으세요.
         const firebaseConfig = {
             apiKey: "AIzaSyDCS1EfQ-DoSLM4pAjdlguMfiRkcH34u8w",
             authDomain: "tetris-list.firebaseapp.com",
@@ -162,16 +161,11 @@
             messagingSenderId: "883824472279",
             appId: "1:883824472279:web:16c3ab67bf1b323ef1c092",
             measurementId: "G-8L4NH0F8S1"
-};
+        };
 
 
         // Firebase 초기화
-        try {
-            firebase.initializeApp(firebaseConfig);
-        } catch (e) {
-            console.error("Firebase 초기화 오류! firebaseConfig 객체를 확인해주세요.", e);
-            alert("Firebase 설정에 문제가 있습니다. 개발자 콘솔(F12)을 확인해주세요.");
-        }
+        firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
         const canvas = document.getElementById('gameCanvas');
@@ -276,4 +270,230 @@
             }
         }
         
-        function isValidMove(piece, dx, dy)
+        function isValidMove(piece, dx, dy, rotation = null) {
+            const shape = rotation || piece.shape;
+            const newX = piece.x + dx;
+            const newY = piece.y + dy;
+            
+            for (let y = 0; y < shape.length; y++) {
+                for (let x = 0; x < shape[y].length; x++) {
+                    if (shape[y][x]) {
+                        const newPosX = newX + x;
+                        const newPosY = newY + y;
+                        if (newPosX < 0 || newPosX >= BOARD_WIDTH || newPosY >= BOARD_HEIGHT || (newPosY >= 0 && board[newPosY][newPosX])) {
+                            return false;
+                        }
+                    }
+                }
+            }
+            return true;
+        }
+        
+        function rotatePiece(piece) {
+            const rotated = [];
+            const shape = piece.shape;
+            for (let i = 0; i < shape[0].length; i++) {
+                rotated[i] = [];
+                for (let j = shape.length - 1; j >= 0; j--) {
+                    rotated[i][shape.length - 1 - j] = shape[j][i];
+                }
+            }
+            return rotated;
+        }
+        
+        function placePiece() {
+            currentPiece.shape.forEach((row, y) => {
+                row.forEach((value, x) => {
+                    if (value) {
+                        board[currentPiece.y + y][currentPiece.x + x] = currentPiece.color;
+                    }
+                });
+            });
+            clearLines();
+            currentPiece = nextPiece;
+            nextPiece = createPiece();
+            if (!isValidMove(currentPiece, 0, 0)) {
+                gameOver();
+            }
+        }
+        
+        function clearLines() {
+            let linesCleared = 0;
+            for (let y = BOARD_HEIGHT - 1; y >= 0; y--) {
+                if (board[y].every(cell => cell !== 0)) {
+                    board.splice(y, 1);
+                    board.unshift(new Array(BOARD_WIDTH).fill(0));
+                    linesCleared++;
+                    y++;
+                }
+            }
+            if (linesCleared > 0) {
+                lines += linesCleared;
+                score += (linesCleared * 100) * linesCleared * level; // 콤보 보너스
+                level = Math.floor(lines / 10) + 1;
+                dropInterval = Math.max(50, 1000 - (level - 1) * 50);
+                updateScore();
+            }
+        }
+        
+        function updateScore() {
+            document.getElementById('score').textContent = score;
+            document.getElementById('level').textContent = level;
+            document.getElementById('lines').textContent = lines;
+        }
+        
+        async function gameOver() {
+            gameRunning = false;
+            document.getElementById('finalScore').textContent = score;
+            document.getElementById('gameOver').style.display = 'block';
+
+            // 게임 오버 시 점수 저장
+            const name = prompt("게임 오버! 랭킹에 등록할 이름을 입력하세요:", "플레이어");
+            if (name && score > 0) {
+                await saveScore(name, score);
+            }
+        }
+
+        // ⭐ 신규 기능: 점수 저장
+        async function saveScore(name, score) {
+            try {
+                await db.collection("scores").add({
+                    name: name,
+                    score: score,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                console.log("점수 저장 성공!");
+                await displayLeaderboard(); // 리더보드 즉시 갱신
+            } catch (error) {
+                console.error("점수 저장 실패: ", error);
+            }
+        }
+
+        // ⭐ 신규 기능: 리더보드 표시
+        async function displayLeaderboard() {
+            const list = document.getElementById('leaderboardList');
+            list.innerHTML = "<li>불러오는 중...</li>"; // 로딩 표시
+
+            try {
+                const snapshot = await db.collection("scores")
+                    .orderBy("score", "desc")
+                    .limit(5)
+                    .get();
+                
+                list.innerHTML = ""; // 목록 초기화
+                if (snapshot.empty) {
+                    list.innerHTML = "<li>아직 등록된 점수가 없습니다.</li>";
+                    return;
+                }
+                
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    const entry = document.createElement('li');
+                    entry.innerHTML = `<span>${data.name}</span> <span>${data.score}</span>`;
+                    list.appendChild(entry);
+                });
+            } catch (error) {
+                console.error("리더보드 로딩 실패: ", error);
+                list.innerHTML = "<li>리더보드를 불러올 수 없습니다.</li>";
+            }
+        }
+        
+        function restartGame() {
+            document.getElementById('gameOver').style.display = 'none';
+            score = 0;
+            level = 1;
+            lines = 0;
+            dropInterval = 1000;
+            updateScore();
+            startGame();
+        }
+        
+        function startGame() {
+            initBoard();
+            currentPiece = createPiece();
+            nextPiece = createPiece();
+            gameRunning = true;
+            paused = false;
+            dropTime = Date.now();
+            gameLoop();
+        }
+        
+        function gameLoop() {
+            if (!gameRunning) return;
+            if (paused) {
+                requestAnimationFrame(gameLoop);
+                return;
+            }
+            
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        function update() {
+            const now = Date.now();
+            if (now - dropTime > dropInterval) {
+                if (isValidMove(currentPiece, 0, 1)) {
+                    currentPiece.y++;
+                } else {
+                    placePiece();
+                }
+                dropTime = now;
+            }
+        }
+        
+        function draw() {
+            drawBoard();
+            drawNextPiece();
+        }
+        
+        document.addEventListener('keydown', (e) => {
+            if (!gameRunning) return;
+            
+            if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') {
+                paused = !paused;
+                if (!paused) { dropTime = Date.now(); } // 일시정지 해제 시 시간 초기화
+                return;
+            }
+
+            if(paused) return;
+            
+            switch (e.key) {
+                case 'ArrowLeft':
+                    if (isValidMove(currentPiece, -1, 0)) currentPiece.x--;
+                    break;
+                case 'ArrowRight':
+                    if (isValidMove(currentPiece, 1, 0)) currentPiece.x++;
+                    break;
+                case 'ArrowDown':
+                    if (isValidMove(currentPiece, 0, 1)) {
+                        currentPiece.y++;
+                        score += 1;
+                        updateScore();
+                    }
+                    break;
+                case 'ArrowUp':
+                    const rotated = rotatePiece(currentPiece);
+                    if (isValidMove(currentPiece, 0, 0, rotated)) currentPiece.shape = rotated;
+                    break;
+                case ' ':
+                    while (isValidMove(currentPiece, 0, 1)) {
+                        currentPiece.y++;
+                        score += 2;
+                    }
+                    updateScore();
+                    placePiece();
+                    break;
+                case 'r':
+                case 'R':
+                    restartGame();
+                    return;
+            }
+        });
+        
+        // 게임 시작 및 초기 리더보드 로드
+        startGame();
+        displayLeaderboard();
+    </script>
+</body>
+</html>
