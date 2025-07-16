@@ -449,7 +449,10 @@
         
         document.addEventListener('keydown', (e) => {
             if (!gameRunning) return;
-            
+
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
+        e.preventDefault(); 
+            }
             if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') {
                 paused = !paused;
                 if (!paused) { dropTime = Date.now(); } // 일시정지 해제 시 시간 초기화
